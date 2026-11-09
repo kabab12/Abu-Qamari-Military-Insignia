@@ -24,6 +24,9 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Install ImageMagick
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
       - name: Prepare web files
         run: |
           mkdir -p www
@@ -45,6 +48,28 @@ jobs:
           npx cap telemetry off
           npx cap add android
           npx cap sync android
+
+      - name: Apply logo
+        run: |
+          SRC=icon-512.png
+          RES=android/app/src/main/res
+          BG=$(convert $SRC -format '%[hex:p{8,256}]' info: | cut -c1-6)
+          for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            IFS=: read n s f <<< "$d"
+            convert $SRC -resize ${s}x${s} $RES/mipmap-$n/ic_launcher.png
+            convert $SRC -resize ${s}x${s} $RES/mipmap-$n/ic_launcher_round.png
+            fg=$((f*62/100))
+            convert $SRC -resize ${fg}x${fg} -background none -gravity center -extent ${f}x${f} $RES/mipmap-$n/ic_launcher_foreground.png
+          done
+          printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_launcher_background">#%s</color>\n</resources>\n' "$BG" > $RES/values/ic_launcher_background.xml
+          find $RES -name 'splash.png' | while read f; do
+            dim=$(identify -format '%wx%h' "$f")
+            w=${dim%x*}; h=${dim#*x}
+            m=$(( w < h ? w : h ))
+            l=$(( m * 40 / 100 ))
+            convert $SRC -resize ${l}x${l} /tmp/logo.png
+            convert -size $dim xc:"#$BG" /tmp/logo.png -gravity center -composite "$f"
+          done
 
       - name: Build APK
         working-directory: android
