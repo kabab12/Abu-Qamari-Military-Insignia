@@ -53,7 +53,7 @@ jobs:
         run: |
           SRC=icon-512.png
           RES=android/app/src/main/res
-          BG=$(convert $SRC -format '%[hex:p{8,256}]' info: | cut -c1-6)
+          BG=FFFFFF
           for d in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
             IFS=: read n s f <<< "$d"
             convert $SRC -resize ${s}x${s} $RES/mipmap-$n/ic_launcher.png
@@ -61,6 +61,17 @@ jobs:
             fg=$((f*62/100))
             convert $SRC -resize ${fg}x${fg} -background none -gravity center -extent ${f}x${f} $RES/mipmap-$n/ic_launcher_foreground.png
           done
+          # Remove Capacitor's default vector icon (blue X on grid) and point the adaptive icon at our logo
+          rm -f $RES/drawable/ic_launcher_background.xml $RES/drawable-v24/ic_launcher_foreground.xml
+          mkdir -p $RES/mipmap-anydpi-v26
+          for n in ic_launcher ic_launcher_round; do
+            printf '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n  <background android:drawable="@color/ic_launcher_background"/>\n  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>\n</adaptive-icon>\n' > $RES/mipmap-anydpi-v26/$n.xml
+          done
+          # Android 12+ system splash: our logo on white
+          STY=$RES/values/styles.xml
+          if grep -q 'AppTheme.NoActionBarLaunch' $STY; then
+            sed -i '/name="AppTheme.NoActionBarLaunch"/a <item name="windowSplashScreenBackground">#FFFFFF</item><item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>' $STY
+          fi
           printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n  <color name="ic_launcher_background">#%s</color>\n</resources>\n' "$BG" > $RES/values/ic_launcher_background.xml
           find $RES -name 'splash.png' | while read f; do
             dim=$(identify -format '%wx%h' "$f")
